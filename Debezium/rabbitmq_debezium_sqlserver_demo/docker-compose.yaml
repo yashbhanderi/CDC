@@ -1,0 +1,53 @@
+services:
+    
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest  # Replace with desired SQL Server version
+    container_name: mssql
+    environment:
+      - MSSQL_AGENT_ENABLED=True
+      - SA_PASSWORD=Xyz@123456  # Set your SA password here (env var for security)
+      - ACCEPT_EULA=Y               # License acceptance for SQL Server
+    ports:
+      - "1434:1433"                 # Default SQL Server port
+    healthcheck:
+      test: ["CMD-SHELL", "powershell -ExecutionPolicy RemoteSigned Test-Connection -ComputerName localhost -Port 1433"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: volume
+        source: data
+        target: /var/opt/mssql  # Persistent storage for SQL Server data
+
+  debezium:
+    image: quay.io/debezium/server:2.5
+    container_name: debezium
+    healthcheck:
+      test: curl http://debezium:8080/q/health || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./debezium_conf:/debezium/conf:readonly
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine  # Replace with desired RabbitMQ version
+    ports:
+      - "5674:5672"  # Expose RabbitMQ port for communication
+      - "15674:15672"  # Expose RabbitMQ management UI port (optional)
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]  # Use rabbitmqctl command for health check
+      interval: 10s  # Check health every 10 seconds
+      timeout: 5s  # Wait up to 5 seconds for response
+      retries: 3  # Retry up to 3 times before considering unhealthy
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq  
+
+volumes:
+  data:
+  rabbitmq-data:
